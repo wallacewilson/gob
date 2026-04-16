@@ -84,23 +84,67 @@
         }
 
         /* Habits Page */
-        .habit-card {
-            border-radius: 20px;
-            padding: 20px;
-            margin-bottom: 15px;
-            color: white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            transition: transform 0.2s ease;
+        .habit-stack {
+            position: relative;
+            margin-bottom: 120px;
+            min-height: 260px;
         }
 
-        .habit-card:active {
-            transform: scale(0.98);
+        .habit-card {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            border-radius: 20px;
+            padding: 20px;
+            color: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            cursor: pointer;
+            transform-origin: top center;
+        }
+
+        .habit-card.collapsed {
+            transform: translateY(calc(var(--stack-index) * 60px)) scale(0.95);
+            z-index: calc(var(--stack-index) + 1);
+        }
+
+        .habit-card.expanded {
+            transform: translateY(0) scale(1);
+            z-index: 20;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+
+        .habit-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
         }
 
         .habit-name {
             font-size: 18px;
             font-weight: 600;
-            margin-bottom: 15px;
+        }
+
+        .habit-card.collapsed .habit-card-content {
+            display: none;
+        }
+
+        .habit-card.expanded .habit-card-content {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .button-group {
@@ -133,6 +177,13 @@
             margin-top: 10px;
             padding-top: 10px;
             border-top: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .habit-card-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
         }
 
         /* Color Palette */
@@ -425,7 +476,7 @@
 
         <!-- Habits Page -->
         <div id="habits" class="page active">
-            <div id="habitsContainer"></div>
+            <div class="habit-stack" id="habitStack"></div>
             <button class="add-btn" onclick="openAddHabitModal()">+</button>
         </div>
 
@@ -495,7 +546,7 @@
         }
 
         function renderHabits() {
-            const container = document.getElementById('habitsContainer');
+            const container = document.getElementById('habitStack');
             
             if (habits.length === 0) {
                 container.innerHTML = `
@@ -507,25 +558,30 @@
                 return;
             }
 
-            container.innerHTML = habits.map(habit => {
+            container.innerHTML = habits.map((habit, index) => {
                 const today = getTodayDate();
                 const todayEntry = habit.entries.find(e => e.date === today);
                 const status = todayEntry ? todayEntry.status : null;
 
                 return `
-                    <div class="habit-card ${habit.color}">
-                        <div class="habit-name">${habit.name}</div>
-                        <div class="button-group">
-                            <button class="status-btn" onclick="recordHabit(${habit.id}, 'good')" style="opacity: ${status === 'good' ? 1 : 0.6};">✓ Good</button>
-                            <button class="status-btn" onclick="recordHabit(${habit.id}, 'ok')" style="opacity: ${status === 'ok' ? 1 : 0.6};">~ OK</button>
-                            <button class="status-btn" onclick="recordHabit(${habit.id}, 'bad')" style="opacity: ${status === 'bad' ? 1 : 0.6};">✕ Bad</button>
+                    <div class="habit-card ${habit.color} collapsed" 
+                         style="--stack-index: ${index}; --stack-count: ${habits.length};" 
+                         data-habit-id="${habit.id}"
+                         onclick="toggleCard(${habit.id})">
+                        <div class="habit-card-header">
+                            <div class="habit-name">${habit.name}</div>
+                            <div style="font-size: 12px; opacity: 0.8;">${getWeekStats(habit)}</div>
                         </div>
-                        <div class="habit-stats">
-                            This week: ${getWeekStats(habit)}
-                        </div>
-                        <div class="habit-card-footer">
-                            <span style="font-size: 12px;">Today: ${status ? status.charAt(0).toUpperCase() + status.slice(1) : 'No entry'}</span>
-                            <button class="delete-btn" onclick="deleteHabit(${habit.id})">Delete</button>
+                        <div class="habit-card-content">
+                            <div class="button-group">
+                                <button class="status-btn" onclick="recordHabit(${habit.id}, 'good', event)" style="opacity: ${status === 'good' ? 1 : 0.6};">✓ Good</button>
+                                <button class="status-btn" onclick="recordHabit(${habit.id}, 'ok', event)" style="opacity: ${status === 'ok' ? 1 : 0.6};">~ OK</button>
+                                <button class="status-btn" onclick="recordHabit(${habit.id}, 'bad', event)" style="opacity: ${status === 'bad' ? 1 : 0.6};">✕ Bad</button>
+                            </div>
+                            <div class="habit-card-footer">
+                                <span style="font-size: 12px;">Today: ${status ? status.charAt(0).toUpperCase() + status.slice(1) : 'No entry'}</span>
+                                <button class="delete-btn" onclick="deleteHabit(${habit.id}, event)">Delete</button>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -639,7 +695,9 @@
         }
 
         // Habit Management
-        function recordHabit(habitId, status) {
+        function recordHabit(habitId, status, event) {
+            if (event) event.stopPropagation();
+            
             const habit = habits.find(h => h.id === habitId);
             if (!habit) return;
 
@@ -653,14 +711,44 @@
             }
 
             saveHabits();
+            collapseCard(habitId);
             renderPage('habits');
         }
 
-        function deleteHabit(habitId) {
+        function deleteHabit(habitId, event) {
+            if (event) event.stopPropagation();
+            
             if (confirm('Are you sure?')) {
                 habits = habits.filter(h => h.id !== habitId);
                 saveHabits();
                 renderPage('habits');
+            }
+        }
+
+        function toggleCard(habitId) {
+            const card = document.querySelector(`[data-habit-id="${habitId}"]`);
+            if (!card) return;
+
+            const isExpanded = card.classList.contains('expanded');
+            
+            // Collapse all cards first
+            document.querySelectorAll('.habit-card').forEach(c => {
+                c.classList.remove('expanded');
+                c.classList.add('collapsed');
+            });
+
+            if (!isExpanded) {
+                // Expand this card
+                card.classList.remove('collapsed');
+                card.classList.add('expanded');
+            }
+        }
+
+        function collapseCard(habitId) {
+            const card = document.querySelector(`[data-habit-id="${habitId}"]`);
+            if (card) {
+                card.classList.remove('expanded');
+                card.classList.add('collapsed');
             }
         }
 
