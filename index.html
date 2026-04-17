@@ -171,6 +171,53 @@
             transform: scale(0.95);
         }
 
+        .status-btn.selected {
+            background: white;
+            color: #333;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .action-btn {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .action-btn-save {
+            background: white;
+            color: #333;
+        }
+
+        .action-btn-save:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .action-btn-save:not(:disabled):active {
+            transform: scale(0.95);
+        }
+
+        .action-btn-cancel {
+            background: rgba(0,0,0,0.25);
+            color: white;
+        }
+
+        .action-btn-cancel:active {
+            transform: scale(0.95);
+            background: rgba(0,0,0,0.35);
+        }
+
         .habit-stats {
             font-size: 12px;
             opacity: 0.9;
@@ -521,6 +568,7 @@
         // Initialize
         let selectedColor = 'color-mint';
         let habits = JSON.parse(localStorage.getItem('habits')) || [];
+        let pendingSelections = {};
 
         // Initialize data
         function initializeData() {
@@ -561,11 +609,14 @@
             container.innerHTML = habits.map((habit, index) => {
                 const today = getTodayDate();
                 const todayEntry = habit.entries.find(e => e.date === today);
-                const status = todayEntry ? todayEntry.status : null;
+                const savedStatus = todayEntry ? todayEntry.status : null;
+                const displayStatus = pendingSelections[habit.id] ?? savedStatus;
+
+                const btnClass = (s) => 'status-btn' + (displayStatus === s ? ' selected' : '');
 
                 return `
-                    <div class="habit-card ${habit.color} collapsed" 
-                         style="--stack-index: ${index}; --stack-count: ${habits.length};" 
+                    <div class="habit-card ${habit.color} collapsed"
+                         style="--stack-index: ${index}; --stack-count: ${habits.length};"
                          data-habit-id="${habit.id}"
                          onclick="toggleCard(${habit.id})">
                         <div class="habit-card-header">
@@ -574,12 +625,16 @@
                         </div>
                         <div class="habit-card-content">
                             <div class="button-group">
-                                <button class="status-btn" onclick="recordHabit(${habit.id}, 'good', event)" style="opacity: ${status === 'good' ? 1 : 0.6};">✓ Good</button>
-                                <button class="status-btn" onclick="recordHabit(${habit.id}, 'ok', event)" style="opacity: ${status === 'ok' ? 1 : 0.6};">~ OK</button>
-                                <button class="status-btn" onclick="recordHabit(${habit.id}, 'bad', event)" style="opacity: ${status === 'bad' ? 1 : 0.6};">✕ Bad</button>
+                                <button class="${btnClass('good')}" data-status="good" onclick="selectStatus(${habit.id}, 'good', event)">✓ Good</button>
+                                <button class="${btnClass('ok')}" data-status="ok" onclick="selectStatus(${habit.id}, 'ok', event)">~ OK</button>
+                                <button class="${btnClass('bad')}" data-status="bad" onclick="selectStatus(${habit.id}, 'bad', event)">✕ Bad</button>
+                            </div>
+                            <div class="action-buttons">
+                                <button class="action-btn action-btn-cancel" onclick="cancelSelection(${habit.id}, event)">Cancel</button>
+                                <button class="action-btn action-btn-save" onclick="saveStatus(${habit.id}, event)" ${displayStatus ? '' : 'disabled'}>Save</button>
                             </div>
                             <div class="habit-card-footer">
-                                <span style="font-size: 12px;">Today: ${status ? status.charAt(0).toUpperCase() + status.slice(1) : 'No entry'}</span>
+                                <span style="font-size: 12px;">Today: ${savedStatus ? savedStatus.charAt(0).toUpperCase() + savedStatus.slice(1) : 'No entry'}</span>
                                 <button class="delete-btn" onclick="deleteHabit(${habit.id}, event)">Delete</button>
                             </div>
                         </div>
@@ -695,9 +750,28 @@
         }
 
         // Habit Management
-        function recordHabit(habitId, status, event) {
+        function selectStatus(habitId, status, event) {
             if (event) event.stopPropagation();
-            
+
+            pendingSelections[habitId] = status;
+
+            const card = document.querySelector(`[data-habit-id="${habitId}"]`);
+            if (!card) return;
+
+            card.querySelectorAll('.status-btn').forEach(btn => {
+                btn.classList.toggle('selected', btn.dataset.status === status);
+            });
+
+            const saveBtn = card.querySelector('.action-btn-save');
+            if (saveBtn) saveBtn.disabled = false;
+        }
+
+        function saveStatus(habitId, event) {
+            if (event) event.stopPropagation();
+
+            const status = pendingSelections[habitId];
+            if (!status) return;
+
             const habit = habits.find(h => h.id === habitId);
             if (!habit) return;
 
@@ -710,7 +784,16 @@
                 habit.entries.push({ date: today, status });
             }
 
+            delete pendingSelections[habitId];
             saveHabits();
+            collapseCard(habitId);
+            renderPage('habits');
+        }
+
+        function cancelSelection(habitId, event) {
+            if (event) event.stopPropagation();
+
+            delete pendingSelections[habitId];
             collapseCard(habitId);
             renderPage('habits');
         }
